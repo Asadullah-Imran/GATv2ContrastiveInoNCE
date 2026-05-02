@@ -1,0 +1,43 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb_checkpoints/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Data files
+*.h5
+*.h5ad
+*.csv
+*.tsv
+*.mtx
+*.loom
+
+# Logs and databases
+*.log
+*.sqlite
+
+# C ext
+*.so
+*.dylib
+*.dll
