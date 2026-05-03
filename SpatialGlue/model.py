@@ -61,6 +61,14 @@ class AdaS_Encoder(Module):
         # Filter out noisy edges (Similarity below threshold becomes 0)
         dynamic_adj = torch.where(sim_matrix < self.threshold, torch.zeros_like(sim_matrix), sim_matrix)
         
+        # ========================================================
+        # THE FIX: Normalize the dynamic graph!
+        # This forces the network to 'average' neighbors instead of adding them,
+        # preventing the latent space from exploding.
+        # ========================================================
+        dynamic_adj = F.normalize(dynamic_adj, p=1, dim=1)
+
+
         # 3. Final GNN pass using the new, dynamically learned biological graph
         y = torch.mm(h, self.weight2)
         y = torch.mm(dynamic_adj, y) 
