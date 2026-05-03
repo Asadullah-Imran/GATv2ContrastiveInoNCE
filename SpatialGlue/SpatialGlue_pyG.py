@@ -15,7 +15,8 @@ class Train_SpatialGlue:
         epochs=600, 
         dim_input=3000,
         dim_output=64,
-        weight_factors = [1, 1, 5] # Updated for AdaS-GNN: [recon1, recon2, contrastive]
+        weight_factors = [1, 1, 5], # Updated for AdaS-GNN: [recon1, recon2, contrastive]
+        epochval=600
         ):
         
         self.data = data.copy()
@@ -48,9 +49,10 @@ class Train_SpatialGlue:
         self.dim_input2 = self.features_omics2.shape[1]
         self.dim_output1 = self.dim_output
         self.dim_output2 = self.dim_output
+        self.epochval = epochval
         
         if self.datatype == 'SPOTS':
-           self.epochs = 600 
+           self.epochs = self.epochval 
            self.weight_factors = [1, 1, 5] # Recon1, Recon2, Contrastive
     
     def train(self):
