@@ -7,24 +7,62 @@ from torch.nn.modules.module import Module
 # ==========================================
 # PROPOSED INNOVATION 1: Contrastive Loss
 # ==========================================
-def info_nce_loss(emb1, emb2, temperature=0.5):
+# def info_nce_loss(emb1, emb2, temperature=0.5):
+#     """
+#     Replaces the 3rd Attention Layer.
+#     Pulls matched cells together, pushes unmatched cells apart in latent space.
+#     """
+#     # Normalize embeddings
+#     emb1 = F.normalize(emb1, dim=1)
+#     emb2 = F.normalize(emb2, dim=1)
+    
+#     # Calculate cosine similarity matrix (N cells x N cells)
+#     logits = torch.matmul(emb1, emb2.T) / temperature
+    
+#     # The 'True' matches are the diagonal (Cell 1 RNA vs Cell 1 Protein)
+#     labels = torch.arange(logits.size(0)).to(emb1.device)
+    
+#     # Cross Entropy forces the diagonal to 1 and everything else to 0
+#     loss = F.cross_entropy(logits, labels)
+#     return loss
+
+
+# ==========================================
+# PROPOSED INNOVATION 1: Contrastive Loss (Optimized)
+# ==========================================
+def info_nce_loss(emb1, emb2, temperature=0.5, batch_size=256):
     """
-    Replaces the 3rd Attention Layer.
-    Pulls matched cells together, pushes unmatched cells apart in latent space.
+    Optimized Contrastive Loss.
+    Uses mini-batching to prevent O(N^2) memory bottlenecks and speed up training.
     """
+    num_cells = emb1.size(0)
+    
+    # Only batch if our dataset is larger than the batch size
+    if num_cells > batch_size:
+        # Generate random indices for our mini-batch
+        idx = torch.randperm(num_cells)[:batch_size].to(emb1.device)
+        
+        # Subset the embeddings
+        emb1_batch = emb1[idx]
+        emb2_batch = emb2[idx]
+    else:
+        emb1_batch = emb1
+        emb2_batch = emb2
+        
     # Normalize embeddings
-    emb1 = F.normalize(emb1, dim=1)
-    emb2 = F.normalize(emb2, dim=1)
+    emb1_batch = F.normalize(emb1_batch, dim=1)
+    emb2_batch = F.normalize(emb2_batch, dim=1)
     
-    # Calculate cosine similarity matrix (N cells x N cells)
-    logits = torch.matmul(emb1, emb2.T) / temperature
+    # Calculate cosine similarity matrix ONLY on the batch
+    logits = torch.matmul(emb1_batch, emb2_batch.T) / temperature
     
-    # The 'True' matches are the diagonal (Cell 1 RNA vs Cell 1 Protein)
-    labels = torch.arange(logits.size(0)).to(emb1.device)
+    # The 'True' matches are the diagonal
+    labels = torch.arange(logits.size(0)).to(emb1_batch.device)
     
-    # Cross Entropy forces the diagonal to 1 and everything else to 0
+    # Cross Entropy calculates the loss
     loss = F.cross_entropy(logits, labels)
     return loss
+
 
 # ==========================================
 # PROPOSED INNOVATION 2: Dynamic Encoder
@@ -54,21 +92,21 @@ class AdaS_Encoder(Module):
         h = F.relu(h)
         
         # 2. The Staircase: Dynamic Edge Updating
-        # Calculate cosine similarity of the intermediate biological state
-        h_norm = F.normalize(h, p=2, dim=1)
-        sim_matrix = torch.mm(h_norm, h_norm.T) 
-        
-        # Filter out noisy edges (Similarity below threshold becomes 0)
-        dynamic_adj = torch.where(sim_matrix < self.threshold, torch.zeros_like(sim_matrix), sim_matrix)
-        
         # ========================================================
-        # THE FIX: Normalize the dynamic graph!
-        # This forces the network to 'average' neighbors instead of adding them,
-        # preventing the latent space from exploding.
+        # THE SPEED FIX: We use torch.no_grad() and .detach() 
+        # This stops PyTorch from calculating 9 million memory-heavy 
+        # gradients just to build the graph map.
         # ========================================================
-        dynamic_adj = F.normalize(dynamic_adj, p=1, dim=1)
-
-
+        with torch.no_grad():
+            h_norm = F.normalize(h.detach(), p=2, dim=1)
+            sim_matrix = torch.mm(h_norm, h_norm.T) 
+            
+            # Filter out noisy edges
+            dynamic_adj = torch.where(sim_matrix < self.threshold, torch.zeros_like(sim_matrix), sim_matrix)
+            
+            # Row normalization (The fix that solved your 151,000 loss)
+            dynamic_adj = F.normalize(dynamic_adj, p=1, dim=1) 
+        
         # 3. Final GNN pass using the new, dynamically learned biological graph
         y = torch.mm(h, self.weight2)
         y = torch.mm(dynamic_adj, y) 
